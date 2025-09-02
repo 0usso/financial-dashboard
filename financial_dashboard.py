@@ -19,7 +19,16 @@ try:
         clear_trades_table = dbm.clear_trades_table
     else:
         def clear_trades_table():
-            st.warning("Fonction clear_trades_table absente sur cette version déployée. Mettez à jour db_manager_new.py sur GitHub.")
+            st.info("Fallback: tentative de vidage direct de la table trades (fonction clear_trades_table absente dans db_manager_new).");
+            try:
+                conn = get_pg_conn()
+                with conn.cursor() as cur:
+                    cur.execute("TRUNCATE TABLE trades")
+                conn.commit()
+                conn.close()
+                st.success("Table 'trades' vidée (fallback). Mettez à jour db_manager_new.py pour la fonction native.")
+            except Exception as e:
+                st.error(f"Échec du fallback TRUNCATE : {e}")
 except Exception as e:
     st.error("⚠️ Erreur d'import de db_manager_new. Détails affichés ci-dessous.")
     import traceback
