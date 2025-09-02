@@ -1,0 +1,163 @@
+import pandas as pd
+from sqlalchemy import create_engine, text
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import streamlit as st
+from datetime import datetime
+
+def process_trading_data(df):
+    """Traite les données de trading pour les préparer pour la base de données"""
+    try:
+        # Copie du DataFrame pour éviter de modifier l'original
+        df_processed = df.copy()
+        
+        # Extraction de l'heure et des minutes depuis Date/Time
+        if 'Date/Time' in df_processed.columns:
+            df_processed['datetime'] = pd.to_datetime(df_processed['Date/Time'])
+            df_processed['hour'] = df_processed['datetime'].dt.hour
+            df_processed['minute'] = df_processed['datetime'].dt.minute
+            
+        # Traitement de la date
+        if 'Trade Date' in df_processed.columns:
+            df_processed['trade_date'] = pd.to_datetime(df_processed['Trade Date'])
+            
+        # Traitement des banques
+        if 'Market Taker' in df_processed.columns:
+            df_processed['taker_bank'] = df_processed['Market Taker']
+        if 'Market Maker' in df_processed.columns:
+            df_processed['maker_bank'] = df_processed['Market Maker']
+            
+        # Conversion des montants et taux
+        if 'Montant' in df_processed.columns:
+            df_processed['amount'] = pd.to_numeric(df_processed['Montant'])
+        if 'Taux' in df_processed.columns:
+            df_processed['rate'] = pd.to_numeric(df_processed['Taux'])
+            
+        # Nettoyage des colonnes temporaires
+        cols_to_keep = ['trade_date', 'hour', 'minute', 'amount', 'rate', 'maker_bank', 'taker_bank']
+        df_final = pd.DataFrame()
+        
+        for col in cols_to_keep:
+            if col in df_processed.columns:
+                df_final[col] = df_processed[col]
+                
+        # Validation finale
+        required_cols = ['trade_date', 'hour', 'minute', 'amount', 'rate', 'maker_bank', 'taker_bank']
+        for col in required_cols:
+            if col not in df_final.columns:
+                raise ValueError(f"Colonne manquante : {col}")
+                
+        return df_final
+        
+    except Exception as e:
+        st.error(f"Erreur lors du traitement des données : {str(e)}")
+        raise
+    
+    return df
+
+# --- Configuration de la base de données ---
+DB_TYPE = "postgresql"
+PG_HOST = "localhost"
+PG_DB = "trading"
+PG_USER = "trading_user"
+PG_PASSWORD = "StrongPassword123"
+
+def get_pg_conn():
+    """Retourne une connexion à la base de données"""
+    return psycopg2.connect(
+        host=PG_HOST,
+        dbname=PG_DB,
+        user=PG_USER,
+        password=PG_PASSWORD
+    )
+
+def get_db_engine():
+    """Retourne un moteur SQLAlchemy pour la base de données"""
+    try:
+        connection_string = f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}/{PG_DB}"
+        engine = create_engine(connection_string)
+        return engine
+    except Exception as e:
+        st.error(f"Erreur de connexion à la base de données: {e}")
+        raise
+
+def create_tables(df):
+    """Crée et remplit la table trades"""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        
+        # Création de la table PostgreSQL avec uniquement les colonnes nécessaires
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS trades (
+            id SERIAL PRIMARY KEY,
+            trade_date DATE,
+            hour INTEGER,
+            minute INTEGER,
+            amount DOUBLE PRECISION,
+            rate DOUBLE PRECISION,
+            maker_bank TEXT,
+            taker_bank TEXT
+        )
+        """)
+        conn.commit()
+        
+        # Suppression des données existantes
+        cur.execute("DELETE FROM trades")
+        conn.commit()
+        
+        # Insertion des nouvelles données
+        for _, row in df.iterrows():
+            cur.execute("""
+                INSERT INTO trades (trade_date, hour, minute, amount, rate, maker_bank, taker_bank)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (
+                row['trade_date'],
+                row['hour'],
+                row['minute'],
+                row['amount'],
+                row['rate'],
+                row['maker_bank'],
+                row['taker_bank']
+            ))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        st.success("✅ Données stockées avec succès!")
+    except Exception as e:
+        st.error(f"❌ Erreur lors du stockage : {str(e)}")
+        if conn:
+            conn.close()
+        raise
+
+def store_data(df, engine):
+    """Stocke les données dans la table trades"""
+    try:
+        # Traitement des données
+        df_processed = process_trading_data(df)
+        
+        # Création/mise à jour de la table et insertion des données
+        create_tables(df_processed)
+        st.success(f"Données stockées avec succès!")
+            
+    except Exception as e:
+        st.error(f"Erreur lors du stockage des données: {e}")
+        raise
+
+def load_data_from_db(engine):
+    """Charge les données depuis PostgreSQL"""
+    try:
+        query = "SELECT * FROM trades"
+        df = pd.read_sql(query, engine)
+        
+        # Conversion des colonnes de date/heure
+        if 'datetime' in df.columns:
+            df['datetime'] = pd.to_datetime(df['datetime'])
+        if 'trade_date' in df.columns:
+            df['trade_date'] = pd.to_datetime(df['trade_date'])
+            
+        return df
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des données: {e}")
+        raise
