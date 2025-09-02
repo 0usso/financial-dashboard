@@ -8,14 +8,18 @@ import os, sys
 
 # Debug import db_manager_new pour afficher l'erreur réelle sur Streamlit Cloud
 try:
-    from db_manager_new import (
-        get_pg_conn,
-        get_db_engine,
-        create_tables,
-        store_data,
-        process_trading_data,
-        clear_trades_table,
-    )
+    import db_manager_new as dbm
+    get_pg_conn = dbm.get_pg_conn
+    get_db_engine = dbm.get_db_engine
+    create_tables = dbm.create_tables
+    store_data = dbm.store_data
+    process_trading_data = dbm.process_trading_data
+    # clear_trades_table peut ne pas encore être présent sur le déploiement cloud
+    if hasattr(dbm, "clear_trades_table"):
+        clear_trades_table = dbm.clear_trades_table
+    else:
+        def clear_trades_table():
+            st.warning("Fonction clear_trades_table absente sur cette version déployée. Mettez à jour db_manager_new.py sur GitHub.")
 except Exception as e:
     st.error("⚠️ Erreur d'import de db_manager_new. Détails affichés ci-dessous.")
     import traceback
