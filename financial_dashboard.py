@@ -32,6 +32,17 @@ except Exception as e:
     ]))
     st.stop()
 
+# Wrapper de rerun compatible versions Streamlit
+def _safe_rerun():
+    for attr in ("rerun", "experimental_rerun"):
+        if hasattr(st, attr):
+            try:
+                getattr(st, attr)()
+                return
+            except Exception:
+                continue
+    st.warning("Impossible de relancer automatiquement l'application.")
+
 # Configuration de la page avec un thème moderne
 st.set_page_config(
     page_title="Analyse Financière Avancée",
@@ -405,7 +416,7 @@ else:
             if confirm_reset:
                 try:
                     clear_trades_table()
-                    st.experimental_rerun()
+                    _safe_rerun()
                 except Exception as e:
                     st.error(f"Erreur : {e}")
             else:
@@ -760,7 +771,7 @@ if df is not None:
             if confirm_reset_loaded:
                 try:
                     clear_trades_table()
-                    st.experimental_rerun()
+                    _safe_rerun()
                 except Exception as e:
                     st.error(f"Erreur : {e}")
             else:
