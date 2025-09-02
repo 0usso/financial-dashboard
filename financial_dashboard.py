@@ -4,14 +4,29 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
-from db_manager_new import (
-    get_pg_conn,
-    get_db_engine,
-    create_tables,
-    store_data,
-    process_trading_data,
-    clear_trades_table,
-)
+import os, sys
+
+# Debug import db_manager_new pour afficher l'erreur réelle sur Streamlit Cloud
+try:
+    from db_manager_new import (
+        get_pg_conn,
+        get_db_engine,
+        create_tables,
+        store_data,
+        process_trading_data,
+        clear_trades_table,
+    )
+except Exception as e:
+    st.error("⚠️ Erreur d'import de db_manager_new. Détails affichés ci-dessous.")
+    import traceback
+    st.code("\n".join([
+        f"Working dir: {os.getcwd()}",
+        f"Python: {sys.version}",
+        f"Fichiers présents: {', '.join(os.listdir())}",
+        "Traceback:",
+        traceback.format_exc()
+    ]))
+    st.stop()
 
 # Configuration de la page avec un thème moderne
 st.set_page_config(
