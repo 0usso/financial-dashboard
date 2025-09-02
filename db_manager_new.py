@@ -1,9 +1,11 @@
+
 import pandas as pd
 from sqlalchemy import create_engine, text
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import streamlit as st
 from datetime import datetime
+from config import POSTGRES_CONNECTION_URI
 
 def process_trading_data(df):
     """Traite les données de trading pour les préparer pour la base de données"""
@@ -55,27 +57,19 @@ def process_trading_data(df):
     
     return df
 
-# --- Configuration de la base de données ---
-DB_TYPE = "postgresql"
-PG_HOST = "localhost"
-PG_DB = "trading"
-PG_USER = "trading_user"
-PG_PASSWORD = "StrongPassword123"
+
+# --- Configuration de la base de données Supabase ---
+
 
 def get_pg_conn():
-    """Retourne une connexion à la base de données"""
-    return psycopg2.connect(
-        host=PG_HOST,
-        dbname=PG_DB,
-        user=PG_USER,
-        password=PG_PASSWORD
-    )
+    """Retourne une connexion à la base de données Supabase"""
+    return psycopg2.connect(POSTGRES_CONNECTION_URI)
+
 
 def get_db_engine():
-    """Retourne un moteur SQLAlchemy pour la base de données"""
+    """Retourne un moteur SQLAlchemy pour la base de données Supabase"""
     try:
-        connection_string = f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}/{PG_DB}"
-        engine = create_engine(connection_string)
+        engine = create_engine(POSTGRES_CONNECTION_URI)
         return engine
     except Exception as e:
         st.error(f"Erreur de connexion à la base de données: {e}")
