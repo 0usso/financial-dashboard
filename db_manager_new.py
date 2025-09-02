@@ -1,3 +1,18 @@
+# Fonction pour vider la table trades
+def clear_trades_table():
+    """Vide la table trades dans la base Supabase."""
+    try:
+        conn = get_pg_conn()
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE trades")
+        conn.commit()
+        conn.close()
+        st.success("✅ Table trades vidée avec succès !")
+    except Exception as e:
+        st.error(f"❌ Erreur lors du vidage de la table : {e}")
+        if conn:
+            conn.close()
+        raise
 
 import pandas as pd
 from sqlalchemy import create_engine, text
