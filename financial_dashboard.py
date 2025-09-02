@@ -425,6 +425,12 @@ else:
             if confirm_reset:
                 try:
                     clear_trades_table()
+                    # Nettoyage du cache de load_and_store_data si présent
+                    if 'load_and_store_data' in globals():
+                        try:
+                            load_and_store_data.clear()
+                        except Exception:
+                            pass
                     _safe_rerun()
                 except Exception as e:
                     st.error(f"Erreur : {e}")
@@ -780,6 +786,11 @@ if df is not None:
             if confirm_reset_loaded:
                 try:
                     clear_trades_table()
+                    if 'load_and_store_data' in globals():
+                        try:
+                            load_and_store_data.clear()
+                        except Exception:
+                            pass
                     _safe_rerun()
                 except Exception as e:
                     st.error(f"Erreur : {e}")
