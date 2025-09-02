@@ -4,7 +4,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
-from db_manager_new import get_pg_conn, get_db_engine, create_tables, store_data, process_trading_data
+from db_manager_new import (
+    get_pg_conn,
+    get_db_engine,
+    create_tables,
+    store_data,
+    process_trading_data,
+    clear_trades_table,
+)
 
 # Configuration de la page avec un thème moderne
 st.set_page_config(
@@ -371,21 +378,19 @@ else:
                 st.write(f"Nombre de makers : {row['nb_makers']}")
                 st.write(f"Nombre de takers : {row['nb_takers']}")
 
-    # Option pour réinitialiser la base de données
-    if st.sidebar.button("🗑️ Réinitialiser la base de données", 
-                        help="Attention : Cette action supprimera toutes les données stockées."):
-        try:
-            conn = get_pg_conn()
-            with conn.cursor() as cur:
-                cur.execute("TRUNCATE TABLE trades")
-            conn.commit()
-            conn.close()
-            st.sidebar.success("✅ Base de données réinitialisée avec succès!")
-            st.experimental_rerun()
-        except Exception as e:
-            st.sidebar.error(f"❌ Erreur lors de la réinitialisation : {e}")
-            if conn:
-                conn.close()
+    # Option pour réinitialiser la base de données (utilise clear_trades_table)
+    with st.sidebar.expander("🧹 Maintenance / Réinitialisation"):
+        st.write("Vider complètement la table 'trades'. Action irréversible.")
+        confirm_reset = st.checkbox("Je confirme vouloir supprimer toutes les données", key="confirm_reset_empty_state")
+        if st.button("🗑️ Vider la base (TRUNCATE)", help="Supprime toutes les lignes de la table trades"):
+            if confirm_reset:
+                try:
+                    clear_trades_table()
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"Erreur : {e}")
+            else:
+                st.warning("Cochez la case de confirmation avant de lancer la suppression.")
 
 if df is not None:
     # Titre principal
@@ -728,6 +733,19 @@ if df is not None:
         st.dataframe(stats_df.style.format(format_dict), use_container_width=True)
     
     # Données brutes avec filtres
+    # Bloc maintenance accessible même quand des données existent
+    with st.sidebar.expander("🧹 Maintenance / Réinitialisation (en ligne)"):
+        st.write("Vider la table 'trades' (irréversible).")
+        confirm_reset_loaded = st.checkbox("Confirmer la suppression totale", key="confirm_reset_loaded_state")
+        if st.button("🗑️ Vider la base maintenant", key="reset_loaded_btn"):
+            if confirm_reset_loaded:
+                try:
+                    clear_trades_table()
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"Erreur : {e}")
+            else:
+                st.warning("Cochez la confirmation avant la suppression.")
     st.markdown("### 📋 Données Détaillées")
     st.dataframe(
         df_filtered.style.background_gradient(subset=selected_metrics, cmap='YlOrRd'),
