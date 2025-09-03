@@ -36,7 +36,8 @@ def process_trading_data(df):
             
         # Traitement de la date
         if 'Trade Date' in df_processed.columns:
-            df_processed['trade_date'] = pd.to_datetime(df_processed['Trade Date'])
+            # Conversion explicite en date (sans composante heure) pour cohérence avec la colonne DATE
+            df_processed['trade_date'] = pd.to_datetime(df_processed['Trade Date']).dt.date
             
         # Traitement des banques
         if 'Market Taker' in df_processed.columns:
@@ -116,24 +117,34 @@ def create_tables(df):
         conn.commit()
         
         # Insertion des nouvelles données
-        for _, row in df.iterrows():
-            cur.execute("""
-                INSERT INTO trades (trade_date, hour, minute, amount, rate, maker_bank, taker_bank)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (
+        # Préparation des lignes pour insertion en lot (plus performant et atomique)
+        rows = [
+            (
                 row['trade_date'],
-                row['hour'],
-                row['minute'],
-                row['amount'],
-                row['rate'],
-                row['maker_bank'],
-                row['taker_bank']
-            ))
+                int(row['hour']),
+                int(row['minute']),
+                float(row['amount']),
+                float(row['rate']),
+                str(row['maker_bank']),
+                str(row['taker_bank'])
+            ) for _, row in df.iterrows()
+        ]
+        if rows:
+            cur.executemany(
+                """INSERT INTO trades (trade_date, hour, minute, amount, rate, maker_bank, taker_bank)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                rows
+            )
         
         conn.commit()
+        # Vérification du nombre total de lignes après insertion
+        cur2 = conn.cursor()
+        cur2.execute("SELECT COUNT(*) FROM trades")
+        total = cur2.fetchone()[0]
+        cur2.close()
         cur.close()
         conn.close()
-        st.success("✅ Données stockées avec succès!")
+        st.success(f"✅ Données stockées avec succès ({total} lignes).")
     except Exception as e:
         st.error(f"❌ Erreur lors du stockage : {str(e)}")
         if conn:
@@ -170,3 +181,49 @@ def load_data_from_db(engine):
     except Exception as e:
         st.error(f"Erreur lors du chargement des données: {e}")
         raise
+
+# ---------------------- Gestion des liens Grafana ----------------------
+def ensure_grafana_table():
+    """Crée la table grafana_links si elle n'existe pas."""
+    try:
+        conn = get_pg_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS grafana_links (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+        conn.commit()
+        cur.close(); conn.close()
+    except Exception as e:
+        st.error(f"Erreur création table grafana_links: {e}")
+
+def add_grafana_link(name: str, url: str):
+    """Ajoute un lien Grafana."""
+    ensure_grafana_table()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError("URL invalide (doit commencer par http:// ou https://)")
+    conn = get_pg_conn(); cur = conn.cursor()
+    cur.execute("INSERT INTO grafana_links (name, url) VALUES (%s, %s)", (name.strip(), url.strip()))
+    conn.commit(); cur.close(); conn.close()
+
+def list_grafana_links():
+    """Retourne les liens Grafana sous forme de liste de dict."""
+    ensure_grafana_table()
+    conn = get_pg_conn(); cur = conn.cursor()
+    cur.execute("SELECT id, name, url, created_at FROM grafana_links ORDER BY created_at DESC")
+    rows = cur.fetchall(); cur.close(); conn.close()
+    return [
+        {"id": r[0], "name": r[1], "url": r[2], "created_at": r[3]} for r in rows
+    ]
+
+def delete_grafana_link(link_id: int):
+    """Supprime un lien Grafana par id."""
+    conn = get_pg_conn(); cur = conn.cursor()
+    cur.execute("DELETE FROM grafana_links WHERE id=%s", (link_id,))
+    conn.commit(); cur.close(); conn.close()

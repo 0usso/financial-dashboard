@@ -19,7 +19,7 @@ try:
         clear_trades_table = dbm.clear_trades_table
     else:
         def clear_trades_table():
-            st.info("Fallback: tentative de vidage direct de la table trades (fonction clear_trades_table absente dans db_manager_new).");
+            st.info("Fallback: tentative de vidage direct de la table trades (fonction clear_trades_table absente dans db_manager_new).")
             try:
                 conn = get_pg_conn()
                 with conn.cursor() as cur:
@@ -29,6 +29,11 @@ try:
                 st.success("Table 'trades' vidée (fallback). Mettez à jour db_manager_new.py pour la fonction native.")
             except Exception as e:
                 st.error(f"Échec du fallback TRUNCATE : {e}")
+
+    # Fonctions Grafana (optionnelles)
+    list_grafana_links = getattr(dbm, 'list_grafana_links', lambda: [])
+    add_grafana_link = getattr(dbm, 'add_grafana_link', None)
+    delete_grafana_link = getattr(dbm, 'delete_grafana_link', None)
 except Exception as e:
     st.error("⚠️ Erreur d'import de db_manager_new. Détails affichés ci-dessous.")
     import traceback
@@ -118,6 +123,42 @@ st.markdown("""
 
 # Sidebar pour les filtres et le chargement de fichiers
 st.sidebar.title("📊 Filtres et Options")
+
+# Section liens Grafana
+with st.sidebar.expander("📈 Liens Grafana"):
+    existing = list_grafana_links()
+    if existing:
+        for item in existing:
+            col_a, col_b = st.columns([4,1])
+            with col_a:
+                st.markdown(f"<a href='{item['url']}' target='_blank'>{item['name']}</a>", unsafe_allow_html=True)
+            with col_b:
+                if delete_grafana_link and st.button("✖", key=f"del_graf_{item['id']}"):
+                    try:
+                        delete_grafana_link(item['id'])
+                        _safe_rerun()
+                    except Exception as e:
+                        st.error(f"Suppression impossible: {e}")
+    else:
+        st.caption("Aucun lien enregistré.")
+
+    if add_grafana_link:
+        with st.form("add_grafana_link_form", clear_on_submit=True):
+            name = st.text_input("Nom", placeholder="Ex: Dashboard Latence")
+            url = st.text_input("URL Grafana", placeholder="https://...")
+            submitted = st.form_submit_button("Ajouter")
+            if submitted:
+                try:
+                    if not name or not url:
+                        st.warning("Nom et URL requis.")
+                    else:
+                        add_grafana_link(name, url)
+                        st.success("Lien ajouté.")
+                        _safe_rerun()
+                except Exception as e:
+                    st.error(f"Erreur ajout: {e}")
+    else:
+        st.info("Fonctions Grafana non disponibles (mettez à jour db_manager_new.py).")
 
 # Section de chargement de fichier
 st.sidebar.header("📂 Chargement des Données")
