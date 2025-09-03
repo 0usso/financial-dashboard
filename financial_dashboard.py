@@ -34,6 +34,19 @@ try:
     list_grafana_links = getattr(dbm, 'list_grafana_links', lambda: [])
     add_grafana_link = getattr(dbm, 'add_grafana_link', None)
     delete_grafana_link = getattr(dbm, 'delete_grafana_link', None)
+
+    # Fallback en mémoire si les fonctions Grafana ne sont pas présentes dans le module (déploiement pas à jour)
+    if add_grafana_link is None:
+        if 'grafana_links_mem' not in st.session_state:
+            st.session_state.grafana_links_mem = []  # liste de dict {id,name,url}
+        def list_grafana_links():
+            return st.session_state.grafana_links_mem
+        def add_grafana_link(name, url):
+            new_id = (max([l['id'] for l in st.session_state.grafana_links_mem]) + 1) if st.session_state.grafana_links_mem else 1
+            st.session_state.grafana_links_mem.append({'id': new_id, 'name': name, 'url': url, 'created_at': None})
+        def delete_grafana_link(link_id:int):
+            st.session_state.grafana_links_mem = [l for l in st.session_state.grafana_links_mem if l['id'] != link_id]
+        st.warning("Fonctions Grafana en base absentes : fallback mémoire (non persistant) utilisé.")
 except Exception as e:
     st.error("⚠️ Erreur d'import de db_manager_new. Détails affichés ci-dessous.")
     import traceback
@@ -159,6 +172,23 @@ with st.sidebar.expander("📈 Liens Grafana"):
                     st.error(f"Erreur ajout: {e}")
     else:
         st.info("Fonctions Grafana non disponibles (mettez à jour db_manager_new.py).")
+
+# Panneau debug Grafana (optionnel)
+with st.sidebar.expander("🔧 Debug Grafana"):
+    if 'dbm' in globals():
+        if st.checkbox("Afficher les attributs de db_manager_new"):
+            st.write(sorted([a for a in dir(dbm) if not a.startswith('_')]))
+        if st.checkbox("Afficher le code source db_manager_new (attention aux infos sensibles)"):
+            import inspect
+            try:
+                src = inspect.getsource(dbm)
+                # Masquer éventuelle URI contenant mot de passe
+                src = src.replace('postgresql://', 'postgresql://***masqué***@')
+                st.code(src[:8000])  # tronquer pour éviter trop long
+            except Exception as e:
+                st.error(f"Impossible de lire le code: {e}")
+    else:
+        st.warning("Module db_manager_new non importé.")
 
 # Section de chargement de fichier
 st.sidebar.header("📂 Chargement des Données")
