@@ -208,10 +208,15 @@ if 'selected_grafana_url' in st.session_state:
         embed_url = f"{raw_url}{sep}kiosk"
     height = st.sidebar.number_input("Hauteur iframe Grafana (px)", min_value=300, max_value=2000, value=800, step=50, key="grafana_iframe_height")
     st.caption(f"Affichage de : {embed_url}")
-    try:
-        components.iframe(embed_url, height=int(height), scrolling=True)
-    except Exception as e:
-        st.error(f"Impossible d'embarquer le dashboard. Ouvrez-le dans un nouvel onglet. Erreur: {e}")
+    # Détection URL locale non accessible depuis le cloud
+    if any(host in embed_url for host in ["localhost", "127.0.0.1", "0.0.0.0"]):
+        st.warning("L'URL pointe vers un Grafana local (localhost). Depuis un autre appareil ou le cloud, cette adresse n'est pas accessible.\n" 
+                   "Solutions : 1) Utiliser l'URL publique de votre Grafana, 2) Créer un snapshot (Share > Snapshot), 3) Exposer Grafana via un tunnel (ngrok) ou hébergement public, 4) Activer une organisation avec partage anonyme.")
+    else:
+        try:
+            components.iframe(embed_url, height=int(height), scrolling=True)
+        except Exception as e:
+            st.error(f"Impossible d'embarquer le dashboard. Ouvrez-le dans un nouvel onglet. Erreur: {e}")
 
 # Section de chargement de fichier
 st.sidebar.header("📂 Chargement des Données")
