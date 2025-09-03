@@ -408,7 +408,6 @@ def validate_data(df):
         return False
 
 # Fonction de chargement et stockage des données
-@st.cache_data(show_spinner=False)
 def load_and_store_data(uploaded_file=None):
     engine = get_db_engine()
     
