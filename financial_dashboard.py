@@ -583,12 +583,18 @@ if df is not None:
                 current_value = df_filtered[metric].iloc[-1]
                 previous_value = df_filtered[metric].iloc[-2] if len(df_filtered) > 1 else current_value
                 delta = ((current_value - previous_value) / previous_value * 100) if previous_value != 0 else 0
-                
-                st.metric(
-                    label=metric,
-                    value=f"{current_value:,.2f}",
-                    delta=f"{delta:.1f}%"
-                )
+                # Format spécifique selon la métrique
+                if metric == 'rate':
+                    value_str = f"{current_value:,.6f}"  # 6 décimales demandées
+                elif metric in ('hour', 'minute'):
+                    try:
+                        value_str = f"{int(current_value)}"
+                    except Exception:
+                        value_str = str(current_value)
+                else:  # amount ou autre numérique
+                    value_str = f"{current_value:,.2f}"  # défaut 2 décimales
+
+                st.metric(label=metric, value=value_str, delta=f"{delta:.1f}%")
 
     # Graphiques avancés
     st.markdown("### 📈 Analyse Détaillée")
