@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
 import os, sys
+import streamlit.components.v1 as components
 
 # Debug import db_manager_new pour afficher l'erreur réelle sur Streamlit Cloud
 try:
@@ -142,13 +143,19 @@ with st.sidebar.expander("📈 Liens Grafana"):
     existing = list_grafana_links()
     if existing:
         for item in existing:
-            col_a, col_b = st.columns([4,1])
+            col_a, col_b, col_c = st.columns([4,1,1])
             with col_a:
-                st.markdown(f"<a href='{item['url']}' target='_blank'>{item['name']}</a>", unsafe_allow_html=True)
+                if st.button(f"▶ {item['name']}", key=f"sel_graf_{item['id']}"):
+                    st.session_state['selected_grafana_url'] = item['url']
             with col_b:
+                st.markdown(f"<a href='{item['url']}' target='_blank'>🌐</a>", unsafe_allow_html=True)
+            with col_c:
                 if delete_grafana_link and st.button("✖", key=f"del_graf_{item['id']}"):
                     try:
                         delete_grafana_link(item['id'])
+                        # Nettoyer sélection si on supprime le lien actif
+                        if 'selected_grafana_url' in st.session_state and st.session_state['selected_grafana_url'] == item['url']:
+                            st.session_state.pop('selected_grafana_url')
                         _safe_rerun()
                     except Exception as e:
                         st.error(f"Suppression impossible: {e}")
@@ -189,6 +196,22 @@ with st.sidebar.expander("🔧 Debug Grafana"):
                 st.error(f"Impossible de lire le code: {e}")
     else:
         st.warning("Module db_manager_new non importé.")
+
+# Zone principale d'affichage du dashboard Grafana sélectionné
+if 'selected_grafana_url' in st.session_state:
+    st.markdown("### 📺 Dashboard Grafana Intégré")
+    raw_url = st.session_state['selected_grafana_url']
+    # Tentative d'ajout param embed si absent
+    embed_url = raw_url
+    if ('embed' not in raw_url) and ('kiosk' not in raw_url):
+        sep = '&' if '?' in raw_url else '?'
+        embed_url = f"{raw_url}{sep}kiosk"
+    height = st.sidebar.number_input("Hauteur iframe Grafana (px)", min_value=300, max_value=2000, value=800, step=50, key="grafana_iframe_height")
+    st.caption(f"Affichage de : {embed_url}")
+    try:
+        components.iframe(embed_url, height=int(height), scrolling=True)
+    except Exception as e:
+        st.error(f"Impossible d'embarquer le dashboard. Ouvrez-le dans un nouvel onglet. Erreur: {e}")
 
 # Section de chargement de fichier
 st.sidebar.header("📂 Chargement des Données")
