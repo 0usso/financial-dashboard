@@ -862,6 +862,92 @@ if df is not None:
     st.plotly_chart(fig_rate_minute, use_container_width=True, key="rate_evolution")
     
     st.plotly_chart(fig_evolution_minute, use_container_width=True)
+
+    # ===================== HEATMAPS =====================
+    st.markdown("### 🔥 Heatmaps")
+    st.caption("Visualisation des concentrations d'activité et des relations entre banques.")
+
+    # Paramètres optionnels dans la sidebar
+    with st.sidebar.expander("⚙️ Options Heatmaps"):
+        top_n_banks = st.slider("Top N banques (par volume)", 5, 30, 15, 1)
+        show_rate_heatmap = st.checkbox("Afficher Heatmap Taux (Heure x Minute)", value=True)
+        show_pair_heatmap = st.checkbox("Afficher Matrix Maker vs Taker", value=True)
+        show_hour_maker_heatmap = st.checkbox("Afficher Volume (Maker x Heure)", value=True)
+
+    # Helper pour limiter aux top N banques selon volume total
+    def _limit_top_banks(df_in, top_n):
+        vols = df_in.groupby('maker_bank')['amount'].sum().sort_values(ascending=False)
+        keep = vols.head(top_n).index
+        return df_in[df_in['maker_bank'].isin(keep) & df_in['taker_bank'].isin(keep)]
+
+    limited_df = _limit_top_banks(df_filtered, top_n_banks)
+
+    # 1. Heatmap Volume par Maker (lignes) et Heure (colonnes)
+    if show_hour_maker_heatmap:
+        st.subheader("Volume par Maker et Heure")
+        try:
+            pivot_vm = (df_filtered.groupby(['maker_bank','hour'])['amount']
+                                   .sum().reset_index())
+            table_vm = pivot_vm.pivot(index='maker_bank', columns='hour', values='amount').fillna(0)
+            # Ordonner makers par volume total
+            order = table_vm.sum(axis=1).sort_values(ascending=False).index
+            table_vm = table_vm.loc[order]
+            fig_vm = go.Figure(data=go.Heatmap(
+                z=table_vm.values,
+                x=table_vm.columns,
+                y=table_vm.index,
+                colorscale='Viridis',
+                colorbar=dict(title='Volume')
+            ))
+            fig_vm.update_layout(height=500, xaxis_title='Heure', yaxis_title='Maker Bank', template='plotly_white')
+            st.plotly_chart(fig_vm, use_container_width=True)
+        except Exception as e:
+            st.error(f"Erreur heatmap Maker x Heure : {e}")
+
+    # 2. Heatmap Volume par paire Maker/Taker (matrix)
+    if show_pair_heatmap:
+        st.subheader("Matrix Volume Maker ↔ Taker (Top banques)")
+        try:
+            pair = (limited_df.groupby(['maker_bank','taker_bank'])['amount']
+                               .sum().reset_index())
+            table_pair = pair.pivot(index='maker_bank', columns='taker_bank', values='amount').fillna(0)
+            # Réordonner l'axe selon volume total
+            order_rows = table_pair.sum(axis=1).sort_values(ascending=False).index
+            order_cols = table_pair.sum(axis=0).sort_values(ascending=False).index
+            table_pair = table_pair.loc[order_rows, order_cols]
+            fig_pair = go.Figure(data=go.Heatmap(
+                z=table_pair.values,
+                x=table_pair.columns,
+                y=table_pair.index,
+                colorscale='Blues',
+                colorbar=dict(title='Volume')
+            ))
+            fig_pair.update_layout(height=600, xaxis_title='Taker Bank', yaxis_title='Maker Bank', template='plotly_white')
+            st.plotly_chart(fig_pair, use_container_width=True)
+        except Exception as e:
+            st.error(f"Erreur heatmap paire Maker/Taker : {e}")
+
+    # 3. Heatmap Taux moyen (Heure x Minute)
+    if show_rate_heatmap:
+        st.subheader("Taux Moyen par Heure et Minute")
+        try:
+            # Limiter nombre de minutes affichées si dataset très grand (sinon 24x60 stable)
+            pivot_rate = (df_filtered.groupby(['hour','minute'])['rate']
+                                       .mean().reset_index())
+            table_rate = pivot_rate.pivot(index='hour', columns='minute', values='rate')
+            fig_rate_hm = go.Figure(data=go.Heatmap(
+                z=table_rate.values,
+                x=table_rate.columns,
+                y=table_rate.index,
+                colorscale='RdYlGn',
+                reversescale=True,
+                colorbar=dict(title='Taux moyen')
+            ))
+            fig_rate_hm.update_layout(height=500, xaxis_title='Minute', yaxis_title='Heure', template='plotly_white')
+            st.plotly_chart(fig_rate_hm, use_container_width=True)
+        except Exception as e:
+            st.error(f"Erreur heatmap taux heure/minute : {e}")
+    # =================== FIN HEATMAPS ===================
     
     # Statistiques descriptives
     st.markdown("### 📊 Statistiques Descriptives")
