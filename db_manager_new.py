@@ -23,55 +23,115 @@ from datetime import datetime
 from config import POSTGRES_CONNECTION_URI
 
 def process_trading_data(df):
-    """Traite les données de trading pour les préparer pour la base de données"""
+    """Nettoie et prépare les données de trading.
+
+    Etapes principales:
+      1. Extraction date / heure / minute depuis 'Date/Time' ou 'Trade Date'.
+      2. Conversion numérique robuste de 'Montant' -> amount et 'Taux' -> rate (gère virgules).
+      3. Nettoyage / normalisation des noms de banques + valeurs manquantes remplies par 'UNKNOWN BANK'.
+      4. Remplissage hour/minute manquants par 0 si extraction impossible.
+      5. Suppression des lignes avec champs critiques manquants (date, amount, rate).
+      6. Validation des plages (0<=hour<24, 0<=minute<60) et suppression lignes invalides.
+      7. Résumé des opérations affiché dans Streamlit.
+    """
     try:
-        # Copie du DataFrame pour éviter de modifier l'original
         df_processed = df.copy()
-        
-        # Extraction de l'heure et des minutes depuis Date/Time
+        rows_initial = len(df_processed)
+
+        # --- 1. Date & time ---
         if 'Date/Time' in df_processed.columns:
-            df_processed['datetime'] = pd.to_datetime(df_processed['Date/Time'])
-            df_processed['hour'] = df_processed['datetime'].dt.hour
-            df_processed['minute'] = df_processed['datetime'].dt.minute
-            
-        # Traitement de la date
+            try:
+                dt = pd.to_datetime(df_processed['Date/Time'], errors='coerce')
+                df_processed['hour'] = dt.dt.hour
+                df_processed['minute'] = dt.dt.minute
+                # Si 'Trade Date' absent, extraire date
+                if 'Trade Date' not in df_processed.columns:
+                    df_processed['Trade Date'] = dt.dt.date
+            except Exception:
+                pass
+
         if 'Trade Date' in df_processed.columns:
-            # Conversion explicite en date (sans composante heure) pour cohérence avec la colonne DATE
-            df_processed['trade_date'] = pd.to_datetime(df_processed['Trade Date']).dt.date
-            
-        # Traitement des banques
+            df_processed['trade_date'] = pd.to_datetime(df_processed['Trade Date'], errors='coerce').dt.date
+
+        # --- 2. Noms de colonnes banques ---
         if 'Market Taker' in df_processed.columns:
             df_processed['taker_bank'] = df_processed['Market Taker']
         if 'Market Maker' in df_processed.columns:
             df_processed['maker_bank'] = df_processed['Market Maker']
-            
-        # Conversion des montants et taux
+
+        # --- 3. Conversion numérique robuste ---
+        def _to_numeric_clean(series):
+            return pd.to_numeric(series.astype(str).str.replace(' ', '').str.replace(',', '.'), errors='coerce')
+
         if 'Montant' in df_processed.columns:
-            df_processed['amount'] = pd.to_numeric(df_processed['Montant'])
+            df_processed['amount'] = _to_numeric_clean(df_processed['Montant'])
         if 'Taux' in df_processed.columns:
-            df_processed['rate'] = pd.to_numeric(df_processed['Taux'])
-            
-        # Nettoyage des colonnes temporaires
+            df_processed['rate'] = _to_numeric_clean(df_processed['Taux'])
+
+        # --- 4. Normalisation banques & valeurs manquantes ---
+        for bcol in ['maker_bank', 'taker_bank']:
+            if bcol in df_processed.columns:
+                df_processed[bcol] = (df_processed[bcol]
+                                      .astype(str)
+                                      .str.strip()
+                                      .str.upper()
+                                      .replace({'NAN': None, 'NONE': None, '': None}))
+                df_processed[bcol] = df_processed[bcol].fillna('UNKNOWN BANK')
+
+        # --- 5. Remplissage heures/minutes si manquantes ---
+        if 'hour' not in df_processed.columns:
+            df_processed['hour'] = 0
+        if 'minute' not in df_processed.columns:
+            df_processed['minute'] = 0
+
+        # Cast vers int en gérant NaN
+        df_processed['hour'] = pd.to_numeric(df_processed['hour'], errors='coerce').fillna(0).astype(int)
+        df_processed['minute'] = pd.to_numeric(df_processed['minute'], errors='coerce').fillna(0).astype(int)
+
+        # --- 6. Construire DF final ---
         cols_to_keep = ['trade_date', 'hour', 'minute', 'amount', 'rate', 'maker_bank', 'taker_bank']
-        df_final = pd.DataFrame()
-        
-        for col in cols_to_keep:
-            if col in df_processed.columns:
-                df_final[col] = df_processed[col]
-                
-        # Validation finale
+        df_final = pd.DataFrame({c: df_processed[c] for c in cols_to_keep if c in df_processed.columns})
+
+        # Stats avant suppression
+        missing_before = df_final.isna().sum()
+
+        # --- 7. Suppression des lignes critiques manquantes ---
+        critical_cols = ['trade_date', 'amount', 'rate']
+        before_drop = len(df_final)
+        df_final = df_final.dropna(subset=[c for c in critical_cols if c in df_final.columns])
+        dropped_missing = before_drop - len(df_final)
+
+        # --- 8. Filtrer heures/minutes hors plage ---
+        before_time = len(df_final)
+        df_final = df_final[(df_final['hour'].between(0,23)) & (df_final['minute'].between(0,59))]
+        dropped_time = before_time - len(df_final)
+
+        # --- 9. Validation colonnes obligatoires ---
         required_cols = ['trade_date', 'hour', 'minute', 'amount', 'rate', 'maker_bank', 'taker_bank']
         for col in required_cols:
             if col not in df_final.columns:
-                raise ValueError(f"Colonne manquante : {col}")
-                
+                raise ValueError(f"Colonne manquante après traitement: {col}")
+
+        # --- 10. Tri chronologique ---
+        try:
+            df_final = df_final.sort_values(['trade_date','hour','minute']).reset_index(drop=True)
+        except Exception:
+            pass
+
+        # --- 11. Résumé ---
+        rows_final = len(df_final)
+        if rows_initial:
+            st.info(
+                f"Nettoyage: {rows_initial} lignes → {rows_final} lignes. "
+                f"Lignes supprimées (valeurs manquantes): {dropped_missing}, hors plage heure/minute: {dropped_time}."
+            )
+        if missing_before.any():
+            st.caption("Valeurs manquantes initiales par colonne: " + ", ".join(f"{c}={v}" for c,v in missing_before.items() if v>0))
+
         return df_final
-        
     except Exception as e:
-        st.error(f"Erreur lors du traitement des données : {str(e)}")
+        st.error(f"Erreur lors du traitement des données : {e}")
         raise
-    
-    return df
 
 
 # --- Configuration de la base de données Supabase ---
