@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from datetime import datetime
 import os, sys
 import streamlit.components.v1 as components
@@ -14,7 +12,7 @@ try:
     get_db_engine = dbm.get_db_engine
     create_tables = dbm.create_tables
     store_data = dbm.store_data
-    process_trading_data = dbm.process_trading_data
+    # process_trading_data est utilisé côté backend (store_data) pour le nettoyage
     # clear_trades_table peut ne pas encore être présent sur le déploiement cloud
     if hasattr(dbm, "clear_trades_table"):
         clear_trades_table = dbm.clear_trades_table
@@ -329,83 +327,9 @@ def validate_data(df):
             st.write("- hour : entier entre 0 et 23")
             st.write("- minute : entier entre 0 et 59")
             return None
-            
     except Exception as e:
         st.error(f"❌ Erreur générale : {str(e)}")
         return None
-        
-        # Vérifier la présence des colonnes
-        missing_columns = []
-        column_mapping = {}
-        
-        for target_col, possible_cols in required_columns.items():
-            # Chercher la première colonne qui existe dans le DataFrame
-            found = False
-            for col in possible_cols:
-                if col in df.columns:
-                    column_mapping[target_col] = col
-                    found = True
-                    break
-            if not found:
-                missing_columns.append(target_col)
-        
-        # S'il manque des colonnes, afficher l'erreur
-        if missing_columns:
-            st.error(f"❌ Colonnes manquantes : {', '.join(missing_columns)}")
-            st.info(f"ℹ️ Colonnes trouvées : {', '.join(df.columns)}")
-            return False
-        
-        # Renommer les colonnes selon le mappage
-        df = df.rename(columns=column_mapping)
-        
-        # Validation et conversion des types
-        try:
-            # Dates et heures
-            if 'trade_date' in df:
-                df['trade_date'] = pd.to_datetime(df['trade_date']).dt.date
-            
-            # Valeurs numériques
-            df['amount'] = pd.to_numeric(df['amount'])
-            df['rate'] = pd.to_numeric(df['rate'])
-            df['hour'] = pd.to_numeric(df['hour']).astype(int)
-            df['minute'] = pd.to_numeric(df['minute']).astype(int)
-            
-            # Valider les plages
-            if not (0 <= df['hour'].max() <= 23 and 0 <= df['hour'].min() <= 23):
-                st.error("❌ Les heures doivent être entre 0 et 23")
-                return False
-                
-            if not (0 <= df['minute'].max() <= 59 and 0 <= df['minute'].min() <= 59):
-                st.error("❌ Les minutes doivent être entre 0 et 59")
-                return False
-                
-            # Nettoyage des banques
-            df['maker_bank'] = df['maker_bank'].fillna('UNKNOWN BANK')
-            df['taker_bank'] = df['taker_bank'].fillna('UNKNOWN BANK')
-            
-            # Vérifier que toutes les banques contiennent "BANK"
-            invalid_makers = ~df['maker_bank'].str.contains('BANK', case=False)
-            invalid_takers = ~df['taker_bank'].str.contains('BANK', case=False)
-            
-            if invalid_makers.any() or invalid_takers.any():
-                st.error("❌ Certaines banques n'ont pas le format attendu (doit contenir 'BANK')")
-                return False
-            
-            return True
-            
-        except Exception as e:
-            st.error(f"❌ Erreur de format : {str(e)}")
-            st.info("ℹ️ Formats attendus :")
-            st.write("- trade_date : date (YYYY-MM-DD)")
-            st.write("- hour : entier (0-23)")
-            st.write("- minute : entier (0-59)")
-            st.write("- amount, rate : nombres décimaux")
-            st.write("- maker_bank, taker_bank : texte contenant 'BANK'")
-            return False
-            
-    except Exception as e:
-        st.error(f"❌ Erreur de validation : {str(e)}")
-        return False
 
 # Fonction de chargement et stockage des données
 def load_and_store_data(uploaded_file=None):
@@ -860,8 +784,6 @@ if df is not None:
     )
     
     st.plotly_chart(fig_rate_minute, use_container_width=True, key="rate_evolution")
-    
-    st.plotly_chart(fig_evolution_minute, use_container_width=True)
 
     # ===================== HEATMAPS =====================
     st.markdown("### 🔥 Heatmaps")

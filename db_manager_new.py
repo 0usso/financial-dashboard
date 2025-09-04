@@ -15,11 +15,9 @@ def clear_trades_table():
         raise
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import streamlit as st
-from datetime import datetime
 from config import POSTGRES_CONNECTION_URI
 
 def process_trading_data(df):
