@@ -6,4 +6,3 @@ sqlalchemy
 python-dotenv
 openpyxl
 matplotlib
-pulp

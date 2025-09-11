@@ -6,13 +6,6 @@ import os, sys
 import streamlit.components.v1 as components
 from typing import Optional
 
-# Module OR (allocation optimale)
-try:
-    from or_module import optimize_allocation, baseline_allocation_cost, OptimizationError
-    _OR_AVAILABLE = True
-except Exception:
-    _OR_AVAILABLE = False
-
 # Debug import db_manager_new pour afficher l'erreur réelle sur Streamlit Cloud
 try:
     import db_manager_new as dbm
@@ -922,81 +915,7 @@ if df is not None:
         use_container_width=True
     )
 
-    # ===================== SECTION RECHERCHE OPÉRATIONNELLE =====================
-    st.markdown("### 🧠 Optimisation d'Allocation (Recherche Opérationnelle)")
-    with st.expander("Allouer un volume cible entre les Market Makers"):
-        if not _OR_AVAILABLE:
-            st.warning("Module d'optimisation non disponible. Installez la dépendance 'pulp' puis relancez: ajoutée dans requirements.txt.")
-        else:
-            # Paramètres utilisateur
-            colp1, colp2, colp3, colp4 = st.columns(4)
-            with colp1:
-                target_volume = st.number_input("Volume cible à répartir", min_value=0.0, value=float(df_filtered['amount'].median()*5 if not df_filtered['amount'].empty else 1000000), step=1000.0, format="%.2f")
-            with colp2:
-                min_share = st.number_input("Part min (%) par maker", min_value=0.0, max_value=100.0, value=0.0, step=1.0)/100.0
-            with colp3:
-                max_share = st.number_input("Part max (%) par maker", min_value=1.0, max_value=100.0, value=50.0, step=1.0)/100.0
-            with colp4:
-                risk_aversion = st.number_input("Aversion risque (pondère σ)", min_value=0.0, max_value=10.0, value=0.0, step=0.1)
-
-            capacity_percentile = st.slider("Percentile capacité historique", 0.5, 1.0, 0.95, 0.01)
-            run_opt = st.button("🚀 Lancer l'optimisation", type="primary")
-
-            if run_opt:
-                try:
-                    alloc_df, meta = optimize_allocation(
-                        df_filtered.copy(),
-                        target_volume=target_volume,
-                        min_share=min_share,
-                        max_share=max_share,
-                        risk_aversion=risk_aversion,
-                        capacity_percentile=capacity_percentile,
-                    )
-                    base_cost = baseline_allocation_cost(df_filtered, target_volume)
-                    st.success("Optimisation terminée.")
-
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        st.metric("Coût attendu baseline", f"{base_cost:,.4f}")
-                    with c2:
-                        st.metric("Coût optimisé", f"{meta['expected_cost']:,.4f}", delta=f"{(meta['expected_cost']-base_cost)/base_cost*100 if base_cost else 0:.2f}%")
-                    with c3:
-                        st.metric("Coût ajusté risque", f"{meta['risk_adjusted_cost']:,.4f}")
-
-                    # Tableau résultats
-                    st.dataframe(
-                        alloc_df[[
-                            'maker_bank','alloc_volume','alloc_pct','avg_rate','std_rate','unit_cost','lower_bound','upper_bound','capacity'
-                        ]].style.format({
-                            'alloc_volume':'{:,.2f}',
-                            'alloc_pct':'{:.2%}',
-                            'avg_rate':'{:,.6f}',
-                            'std_rate':'{:,.6f}',
-                            'unit_cost':'{:,.6f}',
-                            'lower_bound':'{:,.0f}',
-                            'upper_bound':'{:,.0f}',
-                            'capacity':'{:,.0f}',
-                        }), use_container_width=True
-                    )
-
-                    # Graphique allocation
-                    fig_alloc = go.Figure()
-                    fig_alloc.add_trace(go.Bar(
-                        x=alloc_df['maker_bank'],
-                        y=alloc_df['alloc_volume'],
-                        name='Allocation',
-                        marker_color='#2563eb'
-                    ))
-                    fig_alloc.update_layout(title="Allocation Optimale par Maker", height=450, template='plotly_white', xaxis_title='Maker', yaxis_title='Volume alloué')
-                    st.plotly_chart(fig_alloc, use_container_width=True)
-
-                except OptimizationError as oe:
-                    st.error(f"Erreur optimisation : {oe}")
-                except Exception as e:
-                    st.error(f"Erreur inattendue : {e}")
-
-    st.caption("Cette optimisation est une illustration de techniques de Recherche Opérationnelle : programmation linéaire multi-contraintes avec mesure de risque.")
-    # ===================== FIN SECTION RO =====================
+    # Section Recherche Opérationnelle retirée du site à la demande de l'utilisateur.
 
 else:
     st.error("Impossible de charger les données. Veuillez vérifier le chemin du fichier Excel.")
